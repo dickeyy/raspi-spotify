@@ -38,7 +38,7 @@ else:
 
 # Try to import the Waveshare display driver - switching to 2.13" V2 model
 try:
-    from waveshare_epd import epd2in13_V2
+    from waveshare_epd import epd2in13_V3
     logging.info("Successfully imported waveshare_epd module")
 except ImportError as e:
     logging.error(f"Failed to import waveshare_epd: {e}")
@@ -68,7 +68,7 @@ def initialize_display():
     global epd, BASE_IMAGE
     
     logging.info("Initializing display")
-    epd = epd2in13_V2.EPD()
+    epd = epd2in13_V3.EPD()
     epd.init(epd.FULL_UPDATE)
     epd.Clear(0xFF)  # Clear to white
     
