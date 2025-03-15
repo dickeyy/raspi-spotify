@@ -5,7 +5,7 @@ import time
 from PIL import Image, ImageDraw, ImageFont
 
 # Add the Waveshare e-Paper library path
-lib_path = '/home/pi/e-Paper/RaspberryPi_JetsonNano/python/lib'
+lib_path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'e-Paper/RaspberryPi_JetsonNano/python/lib')
 if os.path.exists(lib_path):
     sys.path.append(lib_path)
 else:
