@@ -65,56 +65,6 @@ else:
 # Album art cache dictionary (in-memory cache)
 album_art_cache = {}
 
-# Get the Spotify logo from local file
-def get_spotify_logo(size=10):
-    """Load Spotify logo from local file and resize it"""
-    try:
-        # Path to the spotify logo file (in the same directory as the script)
-        logo_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'spotify.png')
-        
-        if os.path.exists(logo_path):
-            logging.info(f"Loading Spotify logo from: {logo_path}")
-            img = Image.open(logo_path)
-            
-            # Calculate height to maintain aspect ratio
-            aspect_ratio = img.height / img.width
-            height = int(size * aspect_ratio)
-            
-            # Resize the logo to requested size
-            img = img.resize((size, height), Image.LANCZOS)
-            
-            # Convert to 1-bit (black and white)
-            img = img.convert('1', dither=Image.FLOYDSTEINBERG)
-            
-            return img
-        else:
-            logging.warning(f"Spotify logo not found at: {logo_path}")
-            # Fall back to the simple icon if logo file doesn't exist
-            return create_spotify_icon(size)
-            
-    except Exception as e:
-        logging.error(f"Error loading Spotify logo: {str(e)}")
-        # Fall back to the simple icon if there's an error
-        return create_spotify_icon(size)
-
-# Create simple Spotify logo for display (used as fallback)
-def create_spotify_icon(size=10):
-    """Create a simple Spotify logo icon at the specified size"""
-    # Create a blank image with transparent background
-    icon = Image.new('1', (size, size), 255)
-    draw = ImageDraw.Draw(icon)
-    
-    # Draw a simple circular logo (approximating Spotify's logo in monochrome)
-    draw.ellipse((0, 0, size-1, size-1), outline=0)
-    
-    # Draw three arcs to represent the sound waves in the Spotify logo
-    middle = size // 2
-    for i in range(3):
-        offset = i * 2
-        draw.arc((offset, offset, size-1-offset, size-1-offset), 320, 220, fill=0)
-    
-    return icon
-
 def fetch_api_data():
     """Fetch data from API"""
     try:
@@ -166,8 +116,8 @@ def get_album_art(url):
             # Open the image from the response content
             img = Image.open(BytesIO(response.content))
             
-            # Resize to a square for the e-Paper display - increased size to 60x60
-            img = img.resize((60, 60), Image.LANCZOS)
+            # Resize to a square for the e-Paper display - increased size to 75x75
+            img = img.resize((75, 75), Image.LANCZOS)
             
             # Convert to grayscale (1-bit)
             img = img.convert('L')  # Convert to grayscale first
@@ -354,20 +304,11 @@ def display_data(data):
                     artist += "..."
                 draw.text((text_x, text_y + 20), artist, font=font_artist, fill=0)
             
-            # Load Spotify logo - smaller size (8px)
-            spotify_logo = get_spotify_logo(size=8)
-            
-            # Position for "On Spotify" text and logo - increased spacing
-            if album_art:
-                # Position at bottom of album art with more spacing
-                spotify_y = content_y + album_art.height + 5  # Added extra spacing
-            else:
-                # Position below artist text with more spacing
-                spotify_y = text_y + 45  # Increased from 40 to 45 for more space
+            # Position for "On Spotify" text - moved closer to artist text
+            spotify_y = text_y + 38  # Moved up from 45 to 38 to be closer to artist
                 
-            # Draw the logo and "On Spotify" text (smaller font)
-            image.paste(spotify_logo, (text_x, spotify_y))
-            draw.text((text_x + spotify_logo.width + 3, spotify_y), "On Spotify", font=font_status, fill=0)
+            # Draw just the "On Spotify" text without any logo
+            draw.text((text_x, spotify_y), "On Spotify", font=font_status, fill=0)
         
         # Display the image on the e-paper - using partial update method from example
         logging.info("Displaying buffer on e-Paper (partial update)")
