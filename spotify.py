@@ -65,8 +65,40 @@ else:
 # Album art cache dictionary (in-memory cache)
 album_art_cache = {}
 
-# Create simple Spotify logo for display
-def create_spotify_icon(size=12):
+# Get the Spotify logo from local file
+def get_spotify_logo(size=10):
+    """Load Spotify logo from local file and resize it"""
+    try:
+        # Path to the spotify logo file (in the same directory as the script)
+        logo_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'spotify.png')
+        
+        if os.path.exists(logo_path):
+            logging.info(f"Loading Spotify logo from: {logo_path}")
+            img = Image.open(logo_path)
+            
+            # Calculate height to maintain aspect ratio
+            aspect_ratio = img.height / img.width
+            height = int(size * aspect_ratio)
+            
+            # Resize the logo to requested size
+            img = img.resize((size, height), Image.LANCZOS)
+            
+            # Convert to 1-bit (black and white)
+            img = img.convert('1', dither=Image.FLOYDSTEINBERG)
+            
+            return img
+        else:
+            logging.warning(f"Spotify logo not found at: {logo_path}")
+            # Fall back to the simple icon if logo file doesn't exist
+            return create_spotify_icon(size)
+            
+    except Exception as e:
+        logging.error(f"Error loading Spotify logo: {str(e)}")
+        # Fall back to the simple icon if there's an error
+        return create_spotify_icon(size)
+
+# Create simple Spotify logo for display (used as fallback)
+def create_spotify_icon(size=10):
     """Create a simple Spotify logo icon at the specified size"""
     # Create a blank image with transparent background
     icon = Image.new('1', (size, size), 255)
@@ -241,13 +273,13 @@ def display_data(data):
             font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
             font_title = ImageFont.truetype(font_path, 16)
             font_artist = ImageFont.truetype(font_path, 14)
-            font_status = ImageFont.truetype(font_path, 12)
+            font_status = ImageFont.truetype(font_path, 10)  # Smaller font for "On Spotify"
         except IOError:
             # Fallback to the example's font approach
             logging.info("System fonts not found, using default fonts")
             font_title = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 16)
             font_artist = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 14)
-            font_status = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 12)
+            font_status = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 10)  # Smaller font for "On Spotify"
         
         # Create a new image with the display dimensions
         logging.info("Creating display image")
@@ -322,18 +354,20 @@ def display_data(data):
                     artist += "..."
                 draw.text((text_x, text_y + 20), artist, font=font_artist, fill=0)
             
-            # Create Spotify icon
-            spotify_icon = create_spotify_icon(size=12)
+            # Load Spotify logo - smaller size (8px)
+            spotify_logo = get_spotify_logo(size=8)
             
-            # Position for "On Spotify" text and icon
+            # Position for "On Spotify" text and logo - increased spacing
             if album_art:
-                spotify_y = content_y + album_art.height - 15  # Position at bottom of album art
+                # Position at bottom of album art with more spacing
+                spotify_y = content_y + album_art.height + 5  # Added extra spacing
             else:
-                spotify_y = text_y + 40  # Position below artist text
+                # Position below artist text with more spacing
+                spotify_y = text_y + 45  # Increased from 40 to 45 for more space
                 
-            # Draw the icon and "On Spotify" text
-            image.paste(spotify_icon, (text_x, spotify_y))
-            draw.text((text_x + spotify_icon.width + 5, spotify_y), "On Spotify", font=font_status, fill=0)
+            # Draw the logo and "On Spotify" text (smaller font)
+            image.paste(spotify_logo, (text_x, spotify_y))
+            draw.text((text_x + spotify_logo.width + 3, spotify_y), "On Spotify", font=font_status, fill=0)
         
         # Display the image on the e-paper - using partial update method from example
         logging.info("Displaying buffer on e-Paper (partial update)")
