@@ -3,18 +3,26 @@ import sys
 import os
 import time
 import requests
+import logging
 from PIL import Image, ImageDraw, ImageFont
+import traceback
 
-# Add the e-Paper library to the path
-lib_path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'e-Paper/RaspberryPi_JetsonNano/python/lib')
-if os.path.exists(lib_path):
-    sys.path.append(lib_path)
+# Set up paths similar to the working example
+picdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'pic')
+libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'lib')
+if os.path.exists(libdir):
+    sys.path.append(libdir)
 else:
-    lib_path = '/home/pi/e-Paper/RaspberryPi_JetsonNano/python/lib'
-    sys.path.append(lib_path)
+    # Fallback path if the first one doesn't exist
+    libdir = '/home/pi/e-Paper/RaspberryPi_JetsonNano/python/lib'
+    sys.path.append(libdir)
+    picdir = '/home/pi/e-Paper/RaspberryPi_JetsonNano/python/pic'
 
-# Import the Waveshare display driver
-from waveshare_epd import epd2in13_V2
+# Import the Waveshare display driver - using the same model as the example
+from waveshare_epd import epd2in9_V2
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
 
 def fetch_api_data():
     """Fetch data from API"""
@@ -25,26 +33,37 @@ def fetch_api_data():
         else:
             return {"error": f"API request failed with status code: {response.status_code}"}
     except Exception as e:
+        logging.error(f"Exception when fetching API data: {str(e)}")
         return {"error": f"Exception when fetching API data: {str(e)}"}
 
 def display_data(data):
     """Display the data on the e-Paper display"""
     try:
-        # Initialize the display
-        epd = epd2in13_V2.EPD()
-        epd.init(epd.FULL_UPDATE)
+        # Initialize the display - following the example's approach
+        logging.info("Initializing display")
+        epd = epd2in9_V2.EPD()
+        epd.init()
         epd.Clear(0xFF)  # Clear to white
         
-        # Create a new image with the display dimensions
+        # Load fonts - adapt to use the approach from the example
+        try:
+            # First try system fonts
+            font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+            font_title = ImageFont.truetype(font_path, 18)
+            font_artist = ImageFont.truetype(font_path, 16)
+            font_status = ImageFont.truetype(font_path, 12)
+        except IOError:
+            # Fallback to the example's font approach
+            logging.info("System fonts not found, using default fonts")
+            font_title = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 18)
+            font_artist = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 16)
+            font_status = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 12)
+        
+        # Create a new image with the display dimensions - match the example's approach
         # Note: For this display, width and height are swapped in the image creation
+        logging.info("Creating display image")
         image = Image.new('1', (epd.height, epd.width), 255)  # 1: 1-bit color (black and white)
         draw = ImageDraw.Draw(image)
-        
-        # Load fonts
-        font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-        font_title = ImageFont.truetype(font_path, 18)
-        font_artist = ImageFont.truetype(font_path, 16)
-        font_status = ImageFont.truetype(font_path, 12)
         
         # Draw a header
         draw.text((5, 5), "Now Playing:", font=font_status, fill=0)
@@ -82,49 +101,63 @@ def display_data(data):
             draw.text((5, 75), status_text, font=font_status, fill=0)
         
         # Display the image on the e-paper
+        logging.info("Displaying buffer on e-Paper")
         epd.display(epd.getbuffer(image))
         
         # Put display to sleep to save power
+        logging.info("Putting display to sleep")
         epd.sleep()
         
         return True
     except Exception as e:
-        print(f"Error displaying data: {str(e)}")
+        logging.error(f"Error displaying data: {str(e)}")
+        traceback.print_exc()
         return False
 
 def main():
     """Main function"""
     try:
-        print("Starting Spotify track display")
+        logging.info("Starting Spotify track display")
         print("Press Ctrl+C to exit")
         
         while True:
             try:
-                print("\nFetching API data...")
+                logging.info("Fetching API data...")
                 data = fetch_api_data()
                 
-                print("Displaying data on e-Paper...")
+                logging.info("Displaying data on e-Paper...")
                 success = display_data(data)
                 
                 if success:
-                    print("Data displayed successfully!")
+                    logging.info("Data displayed successfully!")
                 else:
-                    print("Failed to display data.")
+                    logging.error("Failed to display data.")
                 
-                # Wait for 10 seconds before refreshing
-                print(f"Waiting 10 seconds before next refresh...")
-                time.sleep(10)
+                # Wait before refreshing
+                logging.info(f"Waiting 30 seconds before next refresh...")
+                time.sleep(30)
                 
             except Exception as e:
-                print(f"Error in refresh cycle: {str(e)}")
-                print("Will try again in 10 seconds...")
-                time.sleep(10)
+                logging.error(f"Error in refresh cycle: {str(e)}")
+                traceback.print_exc()
+                logging.info("Will try again in 30 seconds...")
+                time.sleep(30)
             
     except KeyboardInterrupt:
-        print("\nProgram terminated by user")
-        print("Exiting gracefully...")
+        logging.info("Program terminated by user")
+        logging.info("Exiting gracefully...")
+        # Clean up resources
+        try:
+            epd = epd2in9_V2.EPD()
+            epd.init()
+            epd.Clear(0xFF)
+            epd.sleep()
+            epd2in9_V2.epdconfig.module_exit(cleanup=True)
+        except:
+            pass
     except Exception as e:
-        print(f"A critical error occurred: {str(e)}")
+        logging.error(f"A critical error occurred: {str(e)}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
