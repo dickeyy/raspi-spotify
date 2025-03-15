@@ -65,6 +65,24 @@ else:
 # Album art cache dictionary (in-memory cache)
 album_art_cache = {}
 
+# Create simple Spotify logo for display
+def create_spotify_icon(size=12):
+    """Create a simple Spotify logo icon at the specified size"""
+    # Create a blank image with transparent background
+    icon = Image.new('1', (size, size), 255)
+    draw = ImageDraw.Draw(icon)
+    
+    # Draw a simple circular logo (approximating Spotify's logo in monochrome)
+    draw.ellipse((0, 0, size-1, size-1), outline=0)
+    
+    # Draw three arcs to represent the sound waves in the Spotify logo
+    middle = size // 2
+    for i in range(3):
+        offset = i * 2
+        draw.arc((offset, offset, size-1-offset, size-1-offset), 320, 220, fill=0)
+    
+    return icon
+
 def fetch_api_data():
     """Fetch data from API"""
     try:
@@ -116,9 +134,8 @@ def get_album_art(url):
             # Open the image from the response content
             img = Image.open(BytesIO(response.content))
             
-            # Resize to a small square for the e-Paper display
-            # Creating a 50x50 thumbnail that will fit on the 2.13" display
-            img = img.resize((50, 50), Image.LANCZOS)
+            # Resize to a square for the e-Paper display - increased size to 60x60
+            img = img.resize((60, 60), Image.LANCZOS)
             
             # Convert to grayscale (1-bit)
             img = img.convert('L')  # Convert to grayscale first
@@ -184,7 +201,6 @@ def data_changed(new_data):
     # Check relevant fields
     if new_data.get("title") != previous_data.get("title") or \
        new_data.get("artist") != previous_data.get("artist") or \
-       new_data.get("isPlaying") != previous_data.get("isPlaying") or \
        new_data.get("imageUrl") != previous_data.get("imageUrl") or \
        "error" in new_data != "error" in previous_data:
         return True
@@ -238,9 +254,6 @@ def display_data(data):
         image = Image.new('1', (epd.height, epd.width), 255)  # 1: 1-bit color (black and white)
         draw = ImageDraw.Draw(image)
         
-        # Calculate better margin - centered more
-        left_margin = 15
-        
         # Attempt to get album art if not in error state
         album_art = None
         if "error" not in data and "imageUrl" in data and data["imageUrl"]:
@@ -250,28 +263,44 @@ def display_data(data):
             except Exception as e:
                 logging.error(f"Album art retrieval failed, continuing without it: {str(e)}")
         
-        # Layout adjustment for album art
-        text_start_y = 5  # Default starting position
+        # New layout constants
+        left_margin = 10  # Left margin for all content
+        header_y = 5      # Y position for header
         
         # Draw a header
-        draw.text((left_margin, text_start_y), "Now Playing:", font=font_status, fill=0)
+        draw.text((left_margin, header_y), "Now Playing:", font=font_status, fill=0)
         
         if "error" in data:
             if data["error"] == "Nothing is playing":
                 # Special case for when nothing is playing
-                draw.text((left_margin, text_start_y + 20), "Nothing playing :(", font=font_artist, fill=0)
+                draw.text((left_margin, header_y + 20), "Nothing playing :(", font=font_artist, fill=0)
             else:
                 # Handle other errors
-                draw.text((left_margin, text_start_y + 20), f"Error: {data['error']}", font=font_status, fill=0)
+                draw.text((left_margin, header_y + 20), f"Error: {data['error']}", font=font_status, fill=0)
         else:
+            # New layout with album art on the left
+            
+            # Starting positions
+            content_x = left_margin
+            content_y = header_y + 20
+            
             # Place album art if available
             if album_art:
-                # Position album art in the right corner
-                art_position = (epd.height - 60, 5)  # Right side, top
+                # Position album art on the left
+                art_position = (left_margin, content_y)
                 image.paste(album_art, art_position)
-                max_text_width = art_position[0] - left_margin - 5  # Limit text width
+                
+                # Move text to the right of the album art
+                text_x = left_margin + album_art.width + 10  # Add spacing between art and text
+                text_y = content_y
+                
+                # Calculate maximum text width
+                max_text_width = epd.height - text_x - left_margin
             else:
-                max_text_width = epd.height - (left_margin*2)
+                # No album art, position text at the left margin
+                text_x = left_margin
+                text_y = content_y
+                max_text_width = epd.height - (left_margin * 2)
             
             # Display song title
             if "title" in data:
@@ -281,7 +310,7 @@ def display_data(data):
                     while draw.textlength(title + "...", font=font_title) > max_text_width:
                         title = title[:-1]
                     title += "..."
-                draw.text((left_margin, text_start_y + 20), title, font=font_title, fill=0)
+                draw.text((text_x, text_y), title, font=font_title, fill=0)
             
             # Display artist
             if "artist" in data:
@@ -291,11 +320,20 @@ def display_data(data):
                     while draw.textlength(artist + "...", font=font_artist) > max_text_width:
                         artist = artist[:-1]
                     artist += "..."
-                draw.text((left_margin, text_start_y + 40), artist, font=font_artist, fill=0)
+                draw.text((text_x, text_y + 20), artist, font=font_artist, fill=0)
             
-            # Display playing status
-            status_text = "▶ Playing" if data.get("isPlaying", False) else "❚❚ Paused"
-            draw.text((left_margin, text_start_y + 60), status_text, font=font_status, fill=0)
+            # Create Spotify icon
+            spotify_icon = create_spotify_icon(size=12)
+            
+            # Position for "On Spotify" text and icon
+            if album_art:
+                spotify_y = content_y + album_art.height - 15  # Position at bottom of album art
+            else:
+                spotify_y = text_y + 40  # Position below artist text
+                
+            # Draw the icon and "On Spotify" text
+            image.paste(spotify_icon, (text_x, spotify_y))
+            draw.text((text_x + spotify_icon.width + 5, spotify_y), "On Spotify", font=font_status, fill=0)
         
         # Display the image on the e-paper - using partial update method from example
         logging.info("Displaying buffer on e-Paper (partial update)")
