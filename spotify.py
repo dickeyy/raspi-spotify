@@ -206,9 +206,10 @@ def data_changed(new_data):
     if previous_data is None:
         return True
         
-    # Check relevant fields
+    # Check relevant fields - added album to the check
     if new_data.get("title") != previous_data.get("title") or \
        new_data.get("artist") != previous_data.get("artist") or \
+       new_data.get("album") != previous_data.get("album") or \
        new_data.get("imageUrl") != previous_data.get("imageUrl") or \
        "error" in new_data != "error" in previous_data:
         return True
@@ -249,13 +250,15 @@ def display_data(data):
             font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
             font_title = ImageFont.truetype(font_path, 16)
             font_artist = ImageFont.truetype(font_path, 12)
+            font_album = ImageFont.truetype(font_path, 12)  # Same size as artist font
             font_status = ImageFont.truetype(font_path, 10)
         except IOError:
             # Fallback to the example's font approach
             logging.info("System fonts not found, using default fonts")
             font_title = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 16)
             font_artist = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 14)
-            font_status = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 10)  # Smaller font for "On Spotify"
+            font_album = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 14)  # Same size as artist font
+            font_status = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 10)
         
         # Create a new image with the display dimensions
         logging.info("Creating display image")
@@ -308,11 +311,11 @@ def display_data(data):
                 logging.info(f"Available height for text: {available_height}")
                 
                 # If there's not enough space below the album art, position text to the right
-                if available_height < 60:  # Need at least 60 pixels for title, artist and "On Spotify"
+                if available_height < 60:  # Need at least 60 pixels for title, artist and album
                     logging.info("Not enough space below album art, positioning text to the right")
                     
-                    # Calculate the total height needed for text (title + artist + "On Spotify")
-                    text_total_height = 58  # Approximately 58 pixels (20px title + 20px spacing + 18px artist + 20px spacing)
+                    # Calculate the total height needed for text (title + album + artist)
+                    text_total_height = 58  # Approximately 58 pixels (20px title + 20px spacing + 18px album/artist)
                     
                     # Calculate vertical position to center text alongside album art
                     text_y = content_y + (album_art.height - text_total_height) // 2
@@ -343,7 +346,17 @@ def display_data(data):
                     title += "..."
                 draw.text((text_x, text_y), title, font=font_title, fill=0)
             
-            # Display artist
+            # Display album name (where artist was)
+            if "album" in data:
+                album = data["album"]
+                # Truncate album if too long
+                if draw.textlength(album, font=font_album) > max_text_width:
+                    while draw.textlength(album + "...", font=font_album) > max_text_width:
+                        album = album[:-1]
+                    album += "..."
+                draw.text((text_x, text_y + 20), album, font=font_album, fill=0)
+            
+            # Display artist (where "On Spotify" was)
             if "artist" in data:
                 artist = data["artist"]
                 # Truncate artist if too long
@@ -351,13 +364,7 @@ def display_data(data):
                     while draw.textlength(artist + "...", font=font_artist) > max_text_width:
                         artist = artist[:-1]
                     artist += "..."
-                draw.text((text_x, text_y + 20), artist, font=font_artist, fill=0)
-            
-            # Position for "On Spotify" text
-            spotify_y = text_y + 38
-                
-            # Draw just the "On Spotify" text without any logo
-            draw.text((text_x, spotify_y), "On Spotify", font=font_status, fill=0)
+                draw.text((text_x, text_y + 38), artist, font=font_artist, fill=0)
         
         # Display the image on the e-paper - using partial update method from example
         logging.info("Displaying buffer on e-Paper (partial update)")
