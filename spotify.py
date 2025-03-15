@@ -7,22 +7,43 @@ import logging
 from PIL import Image, ImageDraw, ImageFont
 import traceback
 
-# Set up paths similar to the working example
-picdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'pic')
-libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'lib')
-if os.path.exists(libdir):
-    sys.path.append(libdir)
-else:
-    # Fallback path if the first one doesn't exist
-    libdir = '/home/pi/e-Paper/RaspberryPi_JetsonNano/python/lib'
-    sys.path.append(libdir)
-    picdir = '/home/pi/e-Paper/RaspberryPi_JetsonNano/python/pic'
-
-# Import the Waveshare display driver - using the same model as the example
-from waveshare_epd import epd2in9_V2
-
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
+
+# Add the e-Paper library paths from the home directory
+home_dir = os.path.expanduser('~')  # Get home directory
+e_paper_lib = os.path.join(home_dir, 'e-Paper/RaspberryPi_JetsonNano/python/lib')
+e_paper_pic = os.path.join(home_dir, 'e-Paper/RaspberryPi_JetsonNano/python/pic')
+
+logging.info(f"Checking for e-Paper library at: {e_paper_lib}")
+
+if os.path.exists(e_paper_lib):
+    sys.path.append(e_paper_lib)
+    picdir = e_paper_pic
+    logging.info(f"e-Paper library found at: {e_paper_lib}")
+else:
+    # Fallback to the original approach
+    logging.warning(f"e-Paper library not found at: {e_paper_lib}")
+    logging.warning("Trying original paths...")
+    
+    picdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'pic')
+    libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'lib')
+    
+    if os.path.exists(libdir):
+        sys.path.append(libdir)
+        logging.info(f"Using library path: {libdir}")
+    else:
+        logging.error("Could not find e-Paper library path")
+        sys.exit("Error: Could not find e-Paper library. Please install it or update paths.")
+
+# Try to import the Waveshare display driver
+try:
+    from waveshare_epd import epd2in9_V2
+    logging.info("Successfully imported waveshare_epd module")
+except ImportError as e:
+    logging.error(f"Failed to import waveshare_epd: {e}")
+    logging.error(f"Current sys.path: {sys.path}")
+    sys.exit("Error: waveshare_epd module not found. Please install it or update paths.")
 
 def fetch_api_data():
     """Fetch data from API"""
