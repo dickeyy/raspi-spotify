@@ -335,7 +335,7 @@ def display_data(data):
                     logging.info("Not enough space below album art, positioning text to the right")
                     
                     # Calculate the total height needed for text (title + album + artist)
-                    text_total_height = 63  # Adjusted for new spacing (title + gap + album/artist group)
+                    text_total_height = 58  # Adjusted for reduced spacing
                     
                     # Calculate vertical position to center text alongside album art
                     text_y = content_y + (album_art.height - text_total_height) // 2
@@ -374,8 +374,8 @@ def display_data(data):
                     while draw.textlength(album + "...", font=font_album) > max_text_width:
                         album = album[:-1]
                     album += "..."
-                # Increased spacing from title to album (from 25 to 35 pixels)
-                album_y = text_y + 35
+                # Reduced spacing from title to album (from 35 to 28 pixels)
+                album_y = text_y + 28
                 draw.text((text_x, album_y), album, font=font_album, fill=0)
             
             # Display artist (where "On Spotify" was)
@@ -386,8 +386,8 @@ def display_data(data):
                     while draw.textlength(artist + "...", font=font_artist) > max_text_width:
                         artist = artist[:-1]
                     artist += "..."
-                # Keep artist close to album (just 18 pixels below album)
-                artist_y = album_y + 18
+                # Keep artist close to album (just 16 pixels below album)
+                artist_y = album_y + 16
                 draw.text((text_x, artist_y), artist, font=font_artist, fill=0)
         
         # Display the image on the e-paper - using partial update method from example
