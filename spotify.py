@@ -335,7 +335,7 @@ def display_data(data):
                     logging.info("Not enough space below album art, positioning text to the right")
                     
                     # Calculate the total height needed for text (title + album + artist)
-                    text_total_height = 68  # Increased from 58 to 68 pixels to account for more spacing
+                    text_total_height = 63  # Adjusted for new spacing (title + gap + album/artist group)
                     
                     # Calculate vertical position to center text alongside album art
                     text_y = content_y + (album_art.height - text_total_height) // 2
@@ -374,8 +374,9 @@ def display_data(data):
                     while draw.textlength(album + "...", font=font_album) > max_text_width:
                         album = album[:-1]
                     album += "..."
-                # Increased spacing from title to album (from 20 to 25 pixels)
-                draw.text((text_x, text_y + 25), album, font=font_album, fill=0)
+                # Increased spacing from title to album (from 25 to 35 pixels)
+                album_y = text_y + 35
+                draw.text((text_x, album_y), album, font=font_album, fill=0)
             
             # Display artist (where "On Spotify" was)
             if "artist" in data:
@@ -385,8 +386,9 @@ def display_data(data):
                     while draw.textlength(artist + "...", font=font_artist) > max_text_width:
                         artist = artist[:-1]
                     artist += "..."
-                # Increased spacing from title to artist (from 38 to 48 pixels)
-                draw.text((text_x, text_y + 48), artist, font=font_artist, fill=0)
+                # Keep artist close to album (just 18 pixels below album)
+                artist_y = album_y + 18
+                draw.text((text_x, artist_y), artist, font=font_artist, fill=0)
         
         # Display the image on the e-paper - using partial update method from example
         logging.info("Displaying buffer on e-Paper (partial update)")
