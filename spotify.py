@@ -74,6 +74,23 @@ else:
 # Album art cache dictionary (in-memory cache)
 album_art_cache = {}
 
+def add_rounded_corners(image, radius):
+    """Add rounded corners to an image using a mask"""
+    # Create a mask with rounded corners
+    mask = Image.new('L', image.size, 0)
+    draw = ImageDraw.Draw(mask)
+    
+    # Draw a rectangle with rounded corners on the mask
+    draw.rounded_rectangle([(0, 0), (image.width, image.height)], radius=radius, fill=255)
+    
+    # Create a new image with a white background
+    result = Image.new('L', image.size, 255)
+    
+    # Paste the original image using the mask
+    result.paste(image, (0, 0), mask)
+    
+    return result
+
 # Get the display dimensions once
 def get_display_dimensions():
     """Get the dimensions of the e-Paper display"""
@@ -144,6 +161,9 @@ def get_album_art(url):
             
             # Paste the resized image onto our blank canvas
             img.paste(original_img, (paste_x, paste_y))
+            
+            # Apply rounded corners with a radius of 8 pixels
+            img = add_rounded_corners(img, radius=8)
             
             # Apply dithering and convert to 1-bit
             img = img.convert('1', dither=Image.FLOYDSTEINBERG)
