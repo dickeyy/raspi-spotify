@@ -202,7 +202,9 @@ def initialize_display():
     BASE_IMAGE = Image.new('1', (epd.height, epd.width), 255)
     
     # Do a full refresh initially
-    epd.display(epd.getbuffer(BASE_IMAGE))
+    # Rotate the base image 180 degrees
+    rotated_base = BASE_IMAGE.rotate(180)
+    epd.display(epd.getbuffer(rotated_base))
     
     # Initialize base image for partial updates (per example script)
     time.sleep(1)  # Short delay to ensure display is ready
@@ -392,7 +394,10 @@ def display_data(data):
         
         # Display the image on the e-paper - using partial update method from example
         logging.info("Displaying buffer on e-Paper (partial update)")
-        epd.displayPartial(epd.getbuffer(image))
+        
+        # Rotate the image 180 degrees before displaying
+        rotated_image = image.rotate(180)
+        epd.displayPartial(epd.getbuffer(rotated_image))
         
         # Update previous data
         previous_data = data.copy() if isinstance(data, dict) else data
@@ -417,7 +422,9 @@ def main():
         
         # Set up for partial updates (per example script)
         time_image = Image.new('1', (epd.height, epd.width), 255)
-        epd.displayPartBaseImage(epd.getbuffer(time_image))
+        # Rotate the time image 180 degrees
+        rotated_time_image = time_image.rotate(180)
+        epd.displayPartBaseImage(epd.getbuffer(rotated_time_image))
         last_full_refresh_time = time.time()
         
         while True:
