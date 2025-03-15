@@ -8,8 +8,6 @@ from PIL import Image, ImageDraw, ImageFont
 import traceback
 from io import BytesIO
 import hashlib
-import json
-import shutil
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -109,7 +107,7 @@ DISPLAY_WIDTH, DISPLAY_HEIGHT = get_display_dimensions()
 logging.info(f"Display dimensions: {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}")
 
 # Calculate the maximum album art size (use a large portion of the display height)
-ALBUM_ART_SIZE = int(DISPLAY_WIDTH * 0.7)  # Reduced from 0.9 to 0.7 of the display width
+ALBUM_ART_SIZE = int(DISPLAY_WIDTH * 0.7)
 logging.info(f"Album art size set to: {ALBUM_ART_SIZE}x{ALBUM_ART_SIZE}")
 
 def fetch_api_data():
@@ -309,11 +307,8 @@ def display_data(data):
         draw.text((left_margin, header_y), "Now Playing:", font=font_status, fill=0)
         
         if "error" in data:
-            if data["error"] == "Nothing is playing":
-                # Special case for when nothing is playing
-                draw.text((left_margin, header_y + 20), "Nothing playing", font=font_artist, fill=0)
-            else:
-                # Handle other errors
+            if data["error"] != "Nothing is playing":
+                # Only show error if it's actually an error
                 draw.text((left_margin, header_y + 20), f"Error: {data['error']}", font=font_status, fill=0)
         else:
             # New layout with album art on the left
@@ -349,7 +344,7 @@ def display_data(data):
                 else:
                     # Enough space below the album art
                     text_x = left_margin
-                    # Increased padding below album art from 5 to 10 pixels
+                    # Add padding around the text and album art
                     text_y = content_y + album_art.height + 10
                     max_text_width = epd.height - (left_margin * 2)
             else:
@@ -368,7 +363,7 @@ def display_data(data):
                     title += "..."
                 draw.text((text_x, text_y), title, font=font_title, fill=0)
             
-            # Display album name (where artist was)
+            # Display album name below title
             if "album" in data:
                 album = data["album"]
                 # Truncate album if too long
@@ -376,11 +371,11 @@ def display_data(data):
                     while draw.textlength(album + "...", font=font_album) > max_text_width:
                         album = album[:-1]
                     album += "..."
-                # Reduced spacing from title to album (from 35 to 28 pixels)
+                # Spacing between title and album
                 album_y = text_y + 28
                 draw.text((text_x, album_y), album, font=font_album, fill=0)
             
-            # Display artist (where "On Spotify" was)
+            # Display artist below album name
             if "artist" in data:
                 artist = data["artist"]
                 # Truncate artist if too long
@@ -388,7 +383,7 @@ def display_data(data):
                     while draw.textlength(artist + "...", font=font_artist) > max_text_width:
                         artist = artist[:-1]
                     artist += "..."
-                # Keep artist close to album (just 16 pixels below album)
+                # Spacing between album and artist
                 artist_y = album_y + 16
                 draw.text((text_x, artist_y), artist, font=font_artist, fill=0)
         
@@ -414,7 +409,7 @@ def main():
     """Main function"""
     try:
         logging.info("Starting Spotify track display")
-        print("Press Ctrl+C to exit")
+        logging.info("Press Ctrl+C to exit")
         
         # Initial display setup
         global epd, BASE_IMAGE
