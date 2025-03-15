@@ -7,6 +7,8 @@ import logging
 from PIL import Image, ImageDraw, ImageFont
 import traceback
 from io import BytesIO
+import hashlib
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -52,10 +54,21 @@ last_full_refresh_time = 0
 BASE_IMAGE = None
 epd = None
 
+# Set up a cache directory for album art
+cache_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'cache')
+if not os.path.exists(cache_dir):
+    os.makedirs(cache_dir)
+    logging.info(f"Created cache directory at {cache_dir}")
+else:
+    logging.info(f"Using existing cache directory at {cache_dir}")
+
+# Album art cache dictionary (in-memory cache)
+album_art_cache = {}
+
 def fetch_api_data():
     """Fetch data from API"""
     try:
-        response = requests.get("https://api.kyle.so/spotify/current-track?user=mrdickeyy")
+        response = requests.get("https://api.kyle.so/spotify/current-track?user=mrdickeyy", timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
@@ -65,31 +78,68 @@ def fetch_api_data():
         return {"error": f"Exception when fetching API data: {str(e)}"}
 
 def get_album_art(url):
-    """Download and process album artwork"""
+    """Download and process album artwork with caching"""
     try:
         if not url:
             return None
             
+        # Create a hash of the URL to use as the cache key
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        cache_file = os.path.join(cache_dir, f"{url_hash}.png")
+        
+        # Check if this image is in the in-memory cache
+        if url in album_art_cache:
+            logging.info(f"Using in-memory cached album art for: {url}")
+            return album_art_cache[url]
+        
+        # Check if this image is in the file cache
+        if os.path.exists(cache_file):
+            logging.info(f"Using file cached album art for: {url}")
+            try:
+                img = Image.open(cache_file)
+                # Cache it in memory for faster access next time
+                album_art_cache[url] = img
+                return img
+            except Exception as e:
+                logging.warning(f"Failed to load cached album art: {str(e)}")
+                # If loading from cache fails, continue to download
+        
+        # Download if not in cache
         logging.info(f"Downloading album art from: {url}")
-        response = requests.get(url, timeout=5)
-        if response.status_code != 200:
-            logging.warning(f"Failed to download album art: {response.status_code}")
+        try:
+            # Increased timeout to 15 seconds
+            response = requests.get(url, timeout=15)
+            if response.status_code != 200:
+                logging.warning(f"Failed to download album art: {response.status_code}")
+                return None
+                
+            # Open the image from the response content
+            img = Image.open(BytesIO(response.content))
+            
+            # Resize to a small square for the e-Paper display
+            # Creating a 50x50 thumbnail that will fit on the 2.13" display
+            img = img.resize((50, 50), Image.LANCZOS)
+            
+            # Convert to grayscale (1-bit)
+            img = img.convert('L')  # Convert to grayscale first
+            
+            # Apply dithering and convert to 1-bit
+            img = img.convert('1', dither=Image.FLOYDSTEINBERG)  # Dithering for better look on 1-bit display
+            
+            # Save to file cache
+            img.save(cache_file)
+            
+            # Also cache in memory
+            album_art_cache[url] = img
+            
+            return img
+        except requests.exceptions.Timeout:
+            logging.warning(f"Timeout downloading album art from: {url}")
+            return None
+        except requests.exceptions.RequestException as e:
+            logging.warning(f"Network error downloading album art: {str(e)}")
             return None
             
-        # Open the image from the response content
-        img = Image.open(BytesIO(response.content))
-        
-        # Resize to a small square for the e-Paper display
-        # Creating a 50x50 thumbnail that will fit on the 2.13" display
-        img = img.resize((50, 50), Image.LANCZOS)
-        
-        # Convert to grayscale (1-bit)
-        img = img.convert('L')  # Convert to grayscale first
-        
-        # Apply dithering and convert to 1-bit
-        img = img.convert('1', dither=Image.FLOYDSTEINBERG)  # Dithering for better look on 1-bit display
-        
-        return img
     except Exception as e:
         logging.error(f"Error processing album art: {str(e)}")
         return None
@@ -191,10 +241,14 @@ def display_data(data):
         # Calculate better margin - centered more
         left_margin = 15
         
-        # Check for album art if not in error state
+        # Attempt to get album art if not in error state
         album_art = None
         if "error" not in data and "imageUrl" in data and data["imageUrl"]:
-            album_art = get_album_art(data["imageUrl"])
+            # Try to get album art, but don't let it block the display update if it fails
+            try:
+                album_art = get_album_art(data["imageUrl"])
+            except Exception as e:
+                logging.error(f"Album art retrieval failed, continuing without it: {str(e)}")
         
         # Layout adjustment for album art
         text_start_y = 5  # Default starting position
