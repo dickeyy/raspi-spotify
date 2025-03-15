@@ -116,8 +116,8 @@ def get_album_art(url):
             # Open the image from the response content
             img = Image.open(BytesIO(response.content))
             
-            # Resize to a square for the e-Paper display - increased size to 75x75
-            img = img.resize((75, 75), Image.LANCZOS)
+            # Resize to a square for the e-Paper display - increased size to 100x100
+            img = img.resize((100, 100), Image.LANCZOS)
             
             # Convert to grayscale (1-bit)
             img = img.convert('L')  # Convert to grayscale first
@@ -222,8 +222,8 @@ def display_data(data):
             # First try system fonts
             font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
             font_title = ImageFont.truetype(font_path, 16)
-            font_artist = ImageFont.truetype(font_path, 14)
-            font_status = ImageFont.truetype(font_path, 10)  # Smaller font for "On Spotify"
+            font_artist = ImageFont.truetype(font_path, 10)
+            font_status = ImageFont.truetype(font_path, 10)
         except IOError:
             # Fallback to the example's font approach
             logging.info("System fonts not found, using default fonts")
@@ -255,7 +255,7 @@ def display_data(data):
         if "error" in data:
             if data["error"] == "Nothing is playing":
                 # Special case for when nothing is playing
-                draw.text((left_margin, header_y + 20), "Nothing playing :(", font=font_artist, fill=0)
+                draw.text((left_margin, header_y + 20), "Nothing playing", font=font_artist, fill=0)
             else:
                 # Handle other errors
                 draw.text((left_margin, header_y + 20), f"Error: {data['error']}", font=font_status, fill=0)
