@@ -50,7 +50,12 @@ def display_data(data):
         draw.text((5, 5), "Now Playing:", font=font_status, fill=0)
         
         if "error" in data:
-            draw.text((5, 25), f"Error: {data['error']}", font=font_status, fill=0)
+            if data["error"] == "Nothing is playing":
+                # Special case for when nothing is playing
+                draw.text((5, 25), "Nothing playing :(", font=font_artist, fill=0)
+            else:
+                # Handle other errors
+                draw.text((5, 25), f"Error: {data['error']}", font=font_status, fill=0)
         else:
             # Display song title
             if "title" in data:
@@ -90,21 +95,36 @@ def display_data(data):
 def main():
     """Main function"""
     try:
-        print("Fetching API data...")
-        data = fetch_api_data()
+        print("Starting Spotify track display")
+        print("Press Ctrl+C to exit")
         
-        print("Displaying data on e-Paper...")
-        success = display_data(data)
-        
-        if success:
-            print("Data displayed successfully!")
-        else:
-            print("Failed to display data.")
+        while True:
+            try:
+                print("\nFetching API data...")
+                data = fetch_api_data()
+                
+                print("Displaying data on e-Paper...")
+                success = display_data(data)
+                
+                if success:
+                    print("Data displayed successfully!")
+                else:
+                    print("Failed to display data.")
+                
+                # Wait for 10 seconds before refreshing
+                print(f"Waiting 10 seconds before next refresh...")
+                time.sleep(10)
+                
+            except Exception as e:
+                print(f"Error in refresh cycle: {str(e)}")
+                print("Will try again in 10 seconds...")
+                time.sleep(10)
             
     except KeyboardInterrupt:
-        print("Program terminated by user")
+        print("\nProgram terminated by user")
+        print("Exiting gracefully...")
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
+        print(f"A critical error occurred: {str(e)}")
 
 if __name__ == "__main__":
     main()
