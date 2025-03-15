@@ -310,8 +310,15 @@ def display_data(data):
                 # If there's not enough space below the album art, position text to the right
                 if available_height < 60:  # Need at least 60 pixels for title, artist and "On Spotify"
                     logging.info("Not enough space below album art, positioning text to the right")
+                    
+                    # Calculate the total height needed for text (title + artist + "On Spotify")
+                    text_total_height = 58  # Approximately 58 pixels (20px title + 20px spacing + 18px artist + 20px spacing)
+                    
+                    # Calculate vertical position to center text alongside album art
+                    text_y = content_y + (album_art.height - text_total_height) // 2
+                    logging.info(f"Centering text vertically at y={text_y} (album art height={album_art.height}, text height={text_total_height})")
+                    
                     text_x = left_margin + album_art.width + 5
-                    text_y = content_y
                     max_text_width = epd.height - text_x - left_margin
                 else:
                     # Enough space below the album art
