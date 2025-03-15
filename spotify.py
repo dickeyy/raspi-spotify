@@ -92,7 +92,7 @@ DISPLAY_WIDTH, DISPLAY_HEIGHT = get_display_dimensions()
 logging.info(f"Display dimensions: {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}")
 
 # Calculate the maximum album art size (use a large portion of the display height)
-ALBUM_ART_SIZE = int(DISPLAY_WIDTH * 0.9)  # Use 90% of the display width for album art
+ALBUM_ART_SIZE = int(DISPLAY_WIDTH * 0.7)  # Reduced from 0.9 to 0.7 of the display width
 logging.info(f"Album art size set to: {ALBUM_ART_SIZE}x{ALBUM_ART_SIZE}")
 
 def fetch_api_data():
@@ -262,12 +262,17 @@ def display_data(data):
         image = Image.new('1', (epd.height, epd.width), 255)  # 1: 1-bit color (black and white)
         draw = ImageDraw.Draw(image)
         
+        # Log display dimensions for debugging
+        logging.info(f"Display dimensions: {epd.height}x{epd.width}")
+        
         # Attempt to get album art if not in error state
         album_art = None
         if "error" not in data and "imageUrl" in data and data["imageUrl"]:
             # Try to get album art, but don't let it block the display update if it fails
             try:
                 album_art = get_album_art(data["imageUrl"])
+                if album_art:
+                    logging.info(f"Album art dimensions: {album_art.width}x{album_art.height}")
             except Exception as e:
                 logging.error(f"Album art retrieval failed, continuing without it: {str(e)}")
         
@@ -292,18 +297,27 @@ def display_data(data):
             content_x = left_margin
             content_y = header_y + 20
             
-            # Place album art if available - centered in the display width
+            # Place album art if available
             if album_art:
-                # Position album art centered
+                # Position album art on the left
                 art_position = (left_margin, content_y)
                 image.paste(album_art, art_position)
                 
-                # Move text below the album art
-                text_x = left_margin
-                text_y = content_y + album_art.height + 5  # Add spacing below art
+                # Calculate available space for text
+                available_height = epd.width - (content_y + album_art.height + 5)
+                logging.info(f"Available height for text: {available_height}")
                 
-                # Calculate maximum text width
-                max_text_width = epd.height - (left_margin * 2)
+                # If there's not enough space below the album art, position text to the right
+                if available_height < 60:  # Need at least 60 pixels for title, artist and "On Spotify"
+                    logging.info("Not enough space below album art, positioning text to the right")
+                    text_x = left_margin + album_art.width + 5
+                    text_y = content_y
+                    max_text_width = epd.height - text_x - left_margin
+                else:
+                    # Enough space below the album art
+                    text_x = left_margin
+                    text_y = content_y + album_art.height + 5
+                    max_text_width = epd.height - (left_margin * 2)
             else:
                 # No album art, position text at the left margin
                 text_x = left_margin
