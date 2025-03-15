@@ -19,7 +19,6 @@ from waveshare_epd import epd2in13_V2
 def fetch_api_data():
     """Fetch data from your API"""
     try:
-        # Replace with your actual API endpoint
         response = requests.get("https://api.kyle.so/spotify/current-track?user=mrdickeyy")
         if response.status_code == 200:
             return response.json()
@@ -47,7 +46,7 @@ def display_data(data):
         font_text = ImageFont.truetype(font_path, 12)
         
         # Draw a title
-        draw.text((5, 5), "API Data Display", font=font_title, fill=0)
+        draw.text((5, 5), "Spotify Current Track", font=font_title, fill=0)
         draw.line((5, 25, epd.height-5, 25), fill=0)
         
         # Format and display the data
