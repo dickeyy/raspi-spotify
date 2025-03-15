@@ -36,7 +36,7 @@ else:
         logging.error("Could not find e-Paper library path")
         sys.exit("Error: Could not find e-Paper library. Please install it or update paths.")
 
-# Try to import the Waveshare display driver - switching to 2.13" V2 model
+# Try to import the Waveshare display driver - using the correct V3 model per example
 try:
     from waveshare_epd import epd2in13_V3
     logging.info("Successfully imported waveshare_epd module")
@@ -69,7 +69,7 @@ def initialize_display():
     
     logging.info("Initializing display")
     epd = epd2in13_V3.EPD()
-    epd.init(epd.FULL_UPDATE)
+    epd.init()
     epd.Clear(0xFF)  # Clear to white
     
     # Create base image for the display
@@ -78,8 +78,8 @@ def initialize_display():
     # Do a full refresh initially
     epd.display(epd.getbuffer(BASE_IMAGE))
     
-    # Switch to partial update mode
-    epd.init(epd.PART_UPDATE)
+    # Initialize base image for partial updates (per example script)
+    time.sleep(1)  # Short delay to ensure display is ready
     
     return epd, BASE_IMAGE
 
@@ -129,9 +129,13 @@ def display_data(data):
         # Check if we need a full refresh
         if should_do_full_refresh(current_time):
             logging.info("Performing scheduled full refresh")
-            epd.init(epd.FULL_UPDATE)
+            epd.init()
             epd.Clear(0xFF)
-            epd.init(epd.PART_UPDATE)
+            last_full_refresh_time = current_time
+            
+            # Re-display base image for partial updates (matching example)
+            time_image = Image.new('1', (epd.height, epd.width), 255)
+            epd.displayPartBaseImage(epd.getbuffer(time_image))
         
         # Load fonts - adapt to use the approach from the example
         try:
@@ -147,7 +151,7 @@ def display_data(data):
             font_artist = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 14)
             font_status = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 12)
         
-        # Create a new image with the display dimensions - specific for 2.13" display
+        # Create a new image with the display dimensions
         logging.info("Creating display image")
         image = Image.new('1', (epd.height, epd.width), 255)  # 1: 1-bit color (black and white)
         draw = ImageDraw.Draw(image)
@@ -190,7 +194,7 @@ def display_data(data):
             status_text = "▶ Playing" if data.get("isPlaying", False) else "❚❚ Paused"
             draw.text((left_margin, 65), status_text, font=font_status, fill=0)
         
-        # Display the image on the e-paper - using partial update
+        # Display the image on the e-paper - using partial update method from example
         logging.info("Displaying buffer on e-Paper (partial update)")
         epd.displayPartial(epd.getbuffer(image))
         
@@ -214,6 +218,11 @@ def main():
         # Initial display setup
         global epd, BASE_IMAGE
         epd, BASE_IMAGE = initialize_display()
+        
+        # Set up for partial updates (per example script)
+        time_image = Image.new('1', (epd.height, epd.width), 255)
+        epd.displayPartBaseImage(epd.getbuffer(time_image))
+        last_full_refresh_time = time.time()
         
         while True:
             try:
@@ -244,7 +253,7 @@ def main():
         # Clean up resources
         try:
             if epd is not None:
-                epd.init(epd.FULL_UPDATE)
+                epd.init()
                 epd.Clear(0xFF)
                 epd.sleep()
         except:
