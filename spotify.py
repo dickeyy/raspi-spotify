@@ -116,8 +116,8 @@ def get_album_art(url):
             # Open the image from the response content
             img = Image.open(BytesIO(response.content))
             
-            # Resize to a square for the e-Paper display - increased size to 100x100
-            img = img.resize((100, 100), Image.LANCZOS)
+            # Resize to a square for the e-Paper display - increased size to 500x500
+            img = img.resize((500, 500), Image.LANCZOS)
             
             # Convert to grayscale (1-bit)
             img = img.convert('L')  # Convert to grayscale first
