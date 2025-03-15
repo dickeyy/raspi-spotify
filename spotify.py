@@ -6,6 +6,7 @@ import requests
 import logging
 from PIL import Image, ImageDraw, ImageFont
 import traceback
+from io import BytesIO
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -63,6 +64,36 @@ def fetch_api_data():
         logging.error(f"Exception when fetching API data: {str(e)}")
         return {"error": f"Exception when fetching API data: {str(e)}"}
 
+def get_album_art(url):
+    """Download and process album artwork"""
+    try:
+        if not url:
+            return None
+            
+        logging.info(f"Downloading album art from: {url}")
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            logging.warning(f"Failed to download album art: {response.status_code}")
+            return None
+            
+        # Open the image from the response content
+        img = Image.open(BytesIO(response.content))
+        
+        # Resize to a small square for the e-Paper display
+        # Creating a 50x50 thumbnail that will fit on the 2.13" display
+        img = img.resize((50, 50), Image.LANCZOS)
+        
+        # Convert to grayscale (1-bit)
+        img = img.convert('L')  # Convert to grayscale first
+        
+        # Apply dithering and convert to 1-bit
+        img = img.convert('1', dither=Image.FLOYDSTEINBERG)  # Dithering for better look on 1-bit display
+        
+        return img
+    except Exception as e:
+        logging.error(f"Error processing album art: {str(e)}")
+        return None
+
 def initialize_display():
     """Initialize the display once"""
     global epd, BASE_IMAGE
@@ -104,6 +135,7 @@ def data_changed(new_data):
     if new_data.get("title") != previous_data.get("title") or \
        new_data.get("artist") != previous_data.get("artist") or \
        new_data.get("isPlaying") != previous_data.get("isPlaying") or \
+       new_data.get("imageUrl") != previous_data.get("imageUrl") or \
        "error" in new_data != "error" in previous_data:
         return True
     
@@ -159,40 +191,57 @@ def display_data(data):
         # Calculate better margin - centered more
         left_margin = 15
         
+        # Check for album art if not in error state
+        album_art = None
+        if "error" not in data and "imageUrl" in data and data["imageUrl"]:
+            album_art = get_album_art(data["imageUrl"])
+        
+        # Layout adjustment for album art
+        text_start_y = 5  # Default starting position
+        
         # Draw a header
-        draw.text((left_margin, 5), "Now Playing:", font=font_status, fill=0)
+        draw.text((left_margin, text_start_y), "Now Playing:", font=font_status, fill=0)
         
         if "error" in data:
             if data["error"] == "Nothing is playing":
                 # Special case for when nothing is playing
-                draw.text((left_margin, 25), "Nothing playing :(", font=font_artist, fill=0)
+                draw.text((left_margin, text_start_y + 20), "Nothing playing :(", font=font_artist, fill=0)
             else:
                 # Handle other errors
-                draw.text((left_margin, 25), f"Error: {data['error']}", font=font_status, fill=0)
+                draw.text((left_margin, text_start_y + 20), f"Error: {data['error']}", font=font_status, fill=0)
         else:
+            # Place album art if available
+            if album_art:
+                # Position album art in the right corner
+                art_position = (epd.height - 60, 5)  # Right side, top
+                image.paste(album_art, art_position)
+                max_text_width = art_position[0] - left_margin - 5  # Limit text width
+            else:
+                max_text_width = epd.height - (left_margin*2)
+            
             # Display song title
             if "title" in data:
                 title = data["title"]
                 # Truncate title if too long
-                if draw.textlength(title, font=font_title) > epd.height - (left_margin*2):
-                    while draw.textlength(title + "...", font=font_title) > epd.height - (left_margin*2):
+                if draw.textlength(title, font=font_title) > max_text_width:
+                    while draw.textlength(title + "...", font=font_title) > max_text_width:
                         title = title[:-1]
                     title += "..."
-                draw.text((left_margin, 25), title, font=font_title, fill=0)
+                draw.text((left_margin, text_start_y + 20), title, font=font_title, fill=0)
             
             # Display artist
             if "artist" in data:
                 artist = data["artist"]
                 # Truncate artist if too long
-                if draw.textlength(artist, font=font_artist) > epd.height - (left_margin*2):
-                    while draw.textlength(artist + "...", font=font_artist) > epd.height - (left_margin*2):
+                if draw.textlength(artist, font=font_artist) > max_text_width:
+                    while draw.textlength(artist + "...", font=font_artist) > max_text_width:
                         artist = artist[:-1]
                     artist += "..."
-                draw.text((left_margin, 45), artist, font=font_artist, fill=0)
+                draw.text((left_margin, text_start_y + 40), artist, font=font_artist, fill=0)
             
             # Display playing status
             status_text = "▶ Playing" if data.get("isPlaying", False) else "❚❚ Paused"
-            draw.text((left_margin, 65), status_text, font=font_status, fill=0)
+            draw.text((left_margin, text_start_y + 60), status_text, font=font_status, fill=0)
         
         # Display the image on the e-paper - using partial update method from example
         logging.info("Displaying buffer on e-Paper (partial update)")
@@ -237,15 +286,15 @@ def main():
                 else:
                     logging.error("Failed to update display")
                 
-                # Wait before refreshing
-                logging.info(f"Waiting 30 seconds before next check...")
-                time.sleep(30)
+                # Wait before refreshing - changed to 10 seconds
+                logging.info(f"Waiting 10 seconds before next check...")
+                time.sleep(10)
                 
             except Exception as e:
                 logging.error(f"Error in refresh cycle: {str(e)}")
                 traceback.print_exc()
-                logging.info("Will try again in 30 seconds...")
-                time.sleep(30)
+                logging.info("Will try again in 10 seconds...")
+                time.sleep(10)
             
     except KeyboardInterrupt:
         logging.info("Program terminated by user")
