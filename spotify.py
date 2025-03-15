@@ -319,7 +319,7 @@ def display_data(data):
                     logging.info(f"Centering text vertically at y={text_y} (album art height={album_art.height}, text height={text_total_height})")
                     
                     # Significantly increased padding between album art and text from 15 to 25 pixels
-                    text_x = left_margin + album_art.width + 25
+                    text_x = left_margin + album_art.width + 15
                     max_text_width = epd.height - text_x - left_margin
                 else:
                     # Enough space below the album art
