@@ -9,6 +9,7 @@ import traceback
 from io import BytesIO
 import hashlib
 import json
+import shutil
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -60,10 +61,39 @@ if not os.path.exists(cache_dir):
     os.makedirs(cache_dir)
     logging.info(f"Created cache directory at {cache_dir}")
 else:
-    logging.info(f"Using existing cache directory at {cache_dir}")
+    # Clear the cache to ensure we're not using old cached images
+    logging.info(f"Clearing cache directory at {cache_dir}")
+    for file in os.listdir(cache_dir):
+        file_path = os.path.join(cache_dir, file)
+        try:
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+        except Exception as e:
+            logging.error(f"Error deleting {file_path}: {e}")
 
 # Album art cache dictionary (in-memory cache)
 album_art_cache = {}
+
+# Get the display dimensions once
+def get_display_dimensions():
+    """Get the dimensions of the e-Paper display"""
+    try:
+        epd_temp = epd2in13_V3.EPD()
+        width = epd_temp.width
+        height = epd_temp.height
+        return width, height
+    except Exception as e:
+        logging.error(f"Error getting display dimensions: {e}")
+        # Default dimensions for 2.13" display
+        return 122, 250
+
+# Get display dimensions
+DISPLAY_WIDTH, DISPLAY_HEIGHT = get_display_dimensions()
+logging.info(f"Display dimensions: {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}")
+
+# Calculate the maximum album art size (use a large portion of the display height)
+ALBUM_ART_SIZE = int(DISPLAY_WIDTH * 0.9)  # Use 90% of the display width for album art
+logging.info(f"Album art size set to: {ALBUM_ART_SIZE}x{ALBUM_ART_SIZE}")
 
 def fetch_api_data():
     """Fetch data from API"""
@@ -87,24 +117,7 @@ def get_album_art(url):
         url_hash = hashlib.md5(url.encode()).hexdigest()
         cache_file = os.path.join(cache_dir, f"{url_hash}.png")
         
-        # Check if this image is in the in-memory cache
-        if url in album_art_cache:
-            logging.info(f"Using in-memory cached album art for: {url}")
-            return album_art_cache[url]
-        
-        # Check if this image is in the file cache
-        if os.path.exists(cache_file):
-            logging.info(f"Using file cached album art for: {url}")
-            try:
-                img = Image.open(cache_file)
-                # Cache it in memory for faster access next time
-                album_art_cache[url] = img
-                return img
-            except Exception as e:
-                logging.warning(f"Failed to load cached album art: {str(e)}")
-                # If loading from cache fails, continue to download
-        
-        # Download if not in cache
+        # Force download new image - skip cache for now
         logging.info(f"Downloading album art from: {url}")
         try:
             # Increased timeout to 15 seconds
@@ -114,16 +127,29 @@ def get_album_art(url):
                 return None
                 
             # Open the image from the response content
-            img = Image.open(BytesIO(response.content))
+            original_img = Image.open(BytesIO(response.content))
             
-            # Resize to a square for the e-Paper display - increased size to 500x500
-            img = img.resize((500, 500), Image.LANCZOS)
+            # Create a new blank image with the desired size
+            img = Image.new('L', (ALBUM_ART_SIZE, ALBUM_ART_SIZE), 255)
             
-            # Convert to grayscale (1-bit)
-            img = img.convert('L')  # Convert to grayscale first
+            # Resize the original image to fit within our target size while preserving aspect ratio
+            original_img.thumbnail((ALBUM_ART_SIZE, ALBUM_ART_SIZE), Image.LANCZOS)
+            
+            # Calculate position to center the resized image
+            paste_x = (ALBUM_ART_SIZE - original_img.width) // 2
+            paste_y = (ALBUM_ART_SIZE - original_img.height) // 2
+            
+            # Convert to grayscale
+            original_img = original_img.convert('L')
+            
+            # Paste the resized image onto our blank canvas
+            img.paste(original_img, (paste_x, paste_y))
             
             # Apply dithering and convert to 1-bit
-            img = img.convert('1', dither=Image.FLOYDSTEINBERG)  # Dithering for better look on 1-bit display
+            img = img.convert('1', dither=Image.FLOYDSTEINBERG)
+            
+            # Log the actual size of the image
+            logging.info(f"Album art processed to size: {img.width}x{img.height}")
             
             # Save to file cache
             img.save(cache_file)
@@ -246,7 +272,7 @@ def display_data(data):
                 logging.error(f"Album art retrieval failed, continuing without it: {str(e)}")
         
         # New layout constants
-        left_margin = 10  # Left margin for all content
+        left_margin = 5  # Reduced left margin to make more room
         header_y = 5      # Y position for header
         
         # Draw a header
@@ -266,18 +292,18 @@ def display_data(data):
             content_x = left_margin
             content_y = header_y + 20
             
-            # Place album art if available
+            # Place album art if available - centered in the display width
             if album_art:
-                # Position album art on the left
+                # Position album art centered
                 art_position = (left_margin, content_y)
                 image.paste(album_art, art_position)
                 
-                # Move text to the right of the album art
-                text_x = left_margin + album_art.width + 10  # Add spacing between art and text
-                text_y = content_y
+                # Move text below the album art
+                text_x = left_margin
+                text_y = content_y + album_art.height + 5  # Add spacing below art
                 
                 # Calculate maximum text width
-                max_text_width = epd.height - text_x - left_margin
+                max_text_width = epd.height - (left_margin * 2)
             else:
                 # No album art, position text at the left margin
                 text_x = left_margin
@@ -304,8 +330,8 @@ def display_data(data):
                     artist += "..."
                 draw.text((text_x, text_y + 20), artist, font=font_artist, fill=0)
             
-            # Position for "On Spotify" text - moved closer to artist text
-            spotify_y = text_y + 38  # Moved up from 45 to 38 to be closer to artist
+            # Position for "On Spotify" text
+            spotify_y = text_y + 38
                 
             # Draw just the "On Spotify" text without any logo
             draw.text((text_x, spotify_y), "On Spotify", font=font_status, fill=0)
