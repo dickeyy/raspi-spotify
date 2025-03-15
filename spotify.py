@@ -248,7 +248,7 @@ def display_data(data):
             # First try system fonts
             font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
             font_title = ImageFont.truetype(font_path, 16)
-            font_artist = ImageFont.truetype(font_path, 10)
+            font_artist = ImageFont.truetype(font_path, 12)
             font_status = ImageFont.truetype(font_path, 10)
         except IOError:
             # Fallback to the example's font approach
@@ -318,8 +318,8 @@ def display_data(data):
                     text_y = content_y + (album_art.height - text_total_height) // 2
                     logging.info(f"Centering text vertically at y={text_y} (album art height={album_art.height}, text height={text_total_height})")
                     
-                    # Increased padding between album art and text from 5 to 15 pixels
-                    text_x = left_margin + album_art.width + 15
+                    # Significantly increased padding between album art and text from 15 to 25 pixels
+                    text_x = left_margin + album_art.width + 25
                     max_text_width = epd.height - text_x - left_margin
                 else:
                     # Enough space below the album art
