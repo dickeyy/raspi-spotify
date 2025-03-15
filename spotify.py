@@ -17,7 +17,7 @@ else:
 from waveshare_epd import epd2in13_V2
 
 def fetch_api_data():
-    """Fetch data from your API"""
+    """Fetch data from API"""
     try:
         response = requests.get("https://api.kyle.so/spotify/current-track?user=mrdickeyy")
         if response.status_code == 200:
@@ -40,38 +40,41 @@ def display_data(data):
         image = Image.new('1', (epd.height, epd.width), 255)  # 1: 1-bit color (black and white)
         draw = ImageDraw.Draw(image)
         
-        # Load a font
+        # Load fonts
         font_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-        font_title = ImageFont.truetype(font_path, 16)
-        font_text = ImageFont.truetype(font_path, 12)
+        font_title = ImageFont.truetype(font_path, 18)
+        font_artist = ImageFont.truetype(font_path, 16)
+        font_status = ImageFont.truetype(font_path, 12)
         
-        # Draw a title
-        draw.text((5, 5), "Spotify Current Track", font=font_title, fill=0)
-        draw.line((5, 25, epd.height-5, 25), fill=0)
-        
-        # Format and display the data
-        y_position = 30
+        # Draw a header
+        draw.text((5, 5), "Now Playing:", font=font_status, fill=0)
         
         if "error" in data:
-            draw.text((5, y_position), f"Error: {data['error']}", font=font_text, fill=0)
+            draw.text((5, 25), f"Error: {data['error']}", font=font_status, fill=0)
         else:
-            # Display each key-value pair from the API data
-            # Customize this section based on your API response structure
-            for key, value in data.items():
-                if isinstance(value, (str, int, float, bool)):
-                    text = f"{key}: {value}"
-                    # Truncate text if it's too long
-                    if draw.textlength(text, font=font_text) > epd.height - 10:
-                        while draw.textlength(text + "...", font=font_text) > epd.height - 10:
-                            text = text[:-1]
-                        text += "..."
-                    draw.text((5, y_position), text, font=font_text, fill=0)
-                    y_position += 15
-                    
-                    # Check if we're running out of space
-                    if y_position > epd.width - 20:
-                        draw.text((5, y_position), "...", font=font_text, fill=0)
-                        break
+            # Display song title
+            if "title" in data:
+                title = data["title"]
+                # Truncate title if too long
+                if draw.textlength(title, font=font_title) > epd.height - 10:
+                    while draw.textlength(title + "...", font=font_title) > epd.height - 10:
+                        title = title[:-1]
+                    title += "..."
+                draw.text((5, 25), title, font=font_title, fill=0)
+            
+            # Display artist
+            if "artist" in data:
+                artist = data["artist"]
+                # Truncate artist if too long
+                if draw.textlength(artist, font=font_artist) > epd.height - 10:
+                    while draw.textlength(artist + "...", font=font_artist) > epd.height - 10:
+                        artist = artist[:-1]
+                    artist += "..."
+                draw.text((5, 50), artist, font=font_artist, fill=0)
+            
+            # Display playing status
+            status_text = "▶ Playing" if data.get("isPlaying", False) else "❚❚ Paused"
+            draw.text((5, 75), status_text, font=font_status, fill=0)
         
         # Display the image on the e-paper
         epd.display(epd.getbuffer(image))
