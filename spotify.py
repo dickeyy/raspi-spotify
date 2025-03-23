@@ -55,9 +55,11 @@ previous_data = None
 last_full_refresh_time = 0
 BASE_IMAGE = None
 epd = None
-ws = None
-ws_connected = False
-ws_reconnect_event = threading.Event()
+websocket_app = None
+websocket_thread = None
+reconnect_attempt = 0
+MAX_RECONNECT_ATTEMPTS = 10
+RECONNECT_DELAY = 5  # seconds
 
 # Set up a cache directory for album art
 cache_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'cache')
@@ -115,6 +117,24 @@ logging.info(f"Display dimensions: {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}")
 # Calculate the maximum album art size (use a large portion of the display height)
 ALBUM_ART_SIZE = int(DISPLAY_WIDTH * 0.7)
 logging.info(f"Album art size set to: {ALBUM_ART_SIZE}x{ALBUM_ART_SIZE}")
+
+def process_websocket_data(data):
+    """Process data received from WebSocket"""
+    try:
+        # Parse JSON data
+        if not data:
+            return {"error": "Empty data received"}
+            
+        track_data = json.loads(data)
+        
+        # Check if nothing is playing
+        if not track_data.get("isPlaying", True) and track_data.get("message") == "Nothing is playing":
+            return {"error": "Nothing is playing"}
+            
+        return track_data
+    except Exception as e:
+        logging.error(f"Exception when processing WebSocket data: {str(e)}")
+        return {"error": f"Exception when processing data: {str(e)}"}
 
 def get_album_art(url):
     """Download and process album artwork with caching"""
@@ -220,11 +240,6 @@ def data_changed(new_data):
     if previous_data is None:
         return True
         
-    # Check if playing state changed
-    if "isPlaying" in new_data and "isPlaying" in previous_data:
-        if new_data["isPlaying"] != previous_data["isPlaying"]:
-            return True
-    
     # Check relevant fields - added album to the check
     if new_data.get("title") != previous_data.get("title") or \
        new_data.get("artist") != previous_data.get("artist") or \
@@ -287,6 +302,17 @@ def display_data(data):
         # Log display dimensions for debugging
         logging.info(f"Display dimensions: {epd.height}x{epd.width}")
         
+        # Attempt to get album art if not in error state
+        album_art = None
+        if "error" not in data and "imageUrl" in data and data["imageUrl"]:
+            # Try to get album art, but don't let it block the display update if it fails
+            try:
+                album_art = get_album_art(data["imageUrl"])
+                if album_art:
+                    logging.info(f"Album art dimensions: {album_art.width}x{album_art.height}")
+            except Exception as e:
+                logging.error(f"Album art retrieval failed, continuing without it: {str(e)}")
+        
         # New layout constants
         left_margin = 5  # Reduced left margin to make more room
         header_y = 5      # Y position for header
@@ -294,28 +320,12 @@ def display_data(data):
         # Draw a header
         draw.text((left_margin, header_y), "Now Playing:", font=font_status, fill=0)
         
-        # If nothing is playing, just show the header and update the display
-        if "isPlaying" in data and data["isPlaying"] == False:
-            logging.info("Nothing is playing, showing only the header")
-            # Continue to display the image with just the header
-        # Still handle the old error format as a fallback
-        elif "error" in data:
-            if data["error"].lower() not in ["nothing is playing", "no tracks found"]:
+        if "error" in data:
+            if data["error"] != "Nothing is playing":
                 # Only show error if it's actually an error
                 draw.text((left_margin, header_y + 20), f"Error: {data['error']}", font=font_status, fill=0)
-            # Otherwise, just show the header
         else:
-            # Something is playing, display album art and track info
-            # Attempt to get album art
-            album_art = None
-            if "imageUrl" in data and data["imageUrl"]:
-                # Try to get album art, but don't let it block the display update if it fails
-                try:
-                    album_art = get_album_art(data["imageUrl"])
-                    if album_art:
-                        logging.info(f"Album art dimensions: {album_art.width}x{album_art.height}")
-                except Exception as e:
-                    logging.error(f"Album art retrieval failed, continuing without it: {str(e)}")
+            # New layout with album art on the left
             
             # Starting positions
             content_x = left_margin
@@ -409,90 +419,73 @@ def display_data(data):
         epd = None
         return False
 
+# WebSocket Handlers
 def on_message(ws, message):
-    """Handle websocket messages"""
+    """Handle incoming WebSocket messages"""
+    logging.info("Received WebSocket message")
     try:
-        data = json.loads(message)
-        logging.info(f"Received WebSocket data: {data}")
+        data = process_websocket_data(message)
         display_data(data)
-    except json.JSONDecodeError:
-        logging.error(f"Failed to decode JSON from WebSocket: {message}")
     except Exception as e:
-        logging.error(f"Error processing WebSocket message: {str(e)}")
+        logging.error(f"Error processing message: {str(e)}")
         traceback.print_exc()
 
 def on_error(ws, error):
-    """Handle websocket errors"""
-    logging.error(f"WebSocket error: {error}")
+    """Handle WebSocket errors"""
+    logging.error(f"WebSocket error: {str(error)}")
 
 def on_close(ws, close_status_code, close_msg):
-    """Handle websocket connection close"""
-    global ws_connected
-    ws_connected = False
-    logging.warning(f"WebSocket closed: {close_status_code} - {close_msg}")
-    # Signal the main thread to reconnect
-    ws_reconnect_event.set()
+    """Handle WebSocket connection close"""
+    global reconnect_attempt
+    logging.warning(f"WebSocket closed. Status code: {close_status_code}, Message: {close_msg}")
+    
+    # Attempt to reconnect
+    if reconnect_attempt < MAX_RECONNECT_ATTEMPTS:
+        reconnect_attempt += 1
+        delay = RECONNECT_DELAY * reconnect_attempt
+        logging.info(f"Attempting to reconnect in {delay} seconds (attempt {reconnect_attempt}/{MAX_RECONNECT_ATTEMPTS})...")
+        time.sleep(delay)
+        start_websocket()
+    else:
+        logging.error(f"Maximum reconnection attempts ({MAX_RECONNECT_ATTEMPTS}) reached. Exiting.")
+        sys.exit(1)
 
 def on_open(ws):
-    """Handle websocket connection open"""
-    global ws_connected
-    ws_connected = True
+    """Handle WebSocket connection open"""
+    global reconnect_attempt
     logging.info("WebSocket connection established")
+    reconnect_attempt = 0  # Reset reconnect counter on successful connection
 
-def connect_websocket():
-    """Connect to the WebSocket endpoint"""
-    global ws, ws_connected
+def start_websocket():
+    """Start the WebSocket connection"""
+    global websocket_app
     
-    # WebSocket URL
     ws_url = "wss://api.kyle.so/spotify/current-track/ws?user=mrdickeyy"
+    logging.info(f"Connecting to WebSocket at {ws_url}")
     
-    # Initialize WebSocket connection
-    ws = websocket.WebSocketApp(
+    websocket.enableTrace(True)  # Enable trace for debugging
+    websocket_app = websocket.WebSocketApp(
         ws_url,
+        on_open=on_open,
         on_message=on_message,
         on_error=on_error,
-        on_close=on_close,
-        on_open=on_open
+        on_close=on_close
     )
     
-    return ws
-
-def websocket_thread_function():
-    """Thread function to run the WebSocket client"""
-    global ws, ws_connected
-    
-    while True:
-        try:
-            # Connect to WebSocket if not connected
-            if not ws_connected:
-                logging.info("Connecting to WebSocket...")
-                ws = connect_websocket()
-                # Run the WebSocket connection (this will block until the connection closes)
-                ws.run_forever()
-            
-            # Wait for reconnection signal or timeout
-            ws_reconnect_event.wait(timeout=30)
-            ws_reconnect_event.clear()
-            
-            # If disconnected, wait before reconnecting
-            if not ws_connected:
-                logging.info("WebSocket disconnected, waiting 5 seconds before reconnecting...")
-                time.sleep(5)
-        
-        except Exception as e:
-            logging.error(f"Error in WebSocket thread: {str(e)}")
-            traceback.print_exc()
-            # Wait before retrying
-            time.sleep(5)
+    # Start WebSocket connection in a separate thread
+    wst = threading.Thread(target=websocket_app.run_forever)
+    wst.daemon = True
+    wst.start()
+    return wst
 
 def main():
     """Main function"""
     try:
-        logging.info("Starting Spotify track display with WebSocket connection")
+        logging.info("Starting Spotify track display with WebSocket")
         logging.info("Press Ctrl+C to exit")
         
         # Initial display setup
-        global epd, BASE_IMAGE
+        global epd, BASE_IMAGE, websocket_thread
         epd, BASE_IMAGE = initialize_display()
         
         # Set up for partial updates (per example script)
@@ -502,58 +495,40 @@ def main():
         epd.displayPartBaseImage(epd.getbuffer(rotated_time_image))
         last_full_refresh_time = time.time()
         
-        # Start WebSocket connection in a separate thread
-        ws_thread = threading.Thread(target=websocket_thread_function, daemon=True)
-        ws_thread.start()
+        # Start WebSocket connection
+        websocket_thread = start_websocket()
         
-        # Clear the display initially (don't show any connecting message)
-        epd.init()
-        epd.Clear(0xFF)
-        # Prepare for partial updates
-        time_image = Image.new('1', (epd.height, epd.width), 255)
-        epd.displayPartBaseImage(epd.getbuffer(time_image))
-        # Set initial data
-        initial_data = {"isPlaying": False, "message": "Connecting to Spotify..."}
-        previous_data = initial_data.copy()
-        
-        # Main thread just keeps the program running
+        # Keep main thread alive
         while True:
-            # Just wait, WebSocket thread handles everything
-            time.sleep(1)
-            
-            # Do a periodic full refresh to prevent ghosting, even if the data hasn't changed
+            # Check if we need a full refresh periodically
             current_time = time.time()
             if should_do_full_refresh(current_time):
                 logging.info("Performing scheduled full refresh")
-                try:
-                    if epd is not None:
-                        epd.init()
-                        epd.Clear(0xFF)
-                        
-                        # Re-display base image for partial updates
-                        time_image = Image.new('1', (epd.height, epd.width), 255)
-                        epd.displayPartBaseImage(epd.getbuffer(time_image))
-                        
-                        # Force a redisplay of the current data
-                        display_data(previous_data if previous_data else {"error": "Waiting for data..."})
-                except Exception as e:
-                    logging.error(f"Error during periodic refresh: {str(e)}")
-                    traceback.print_exc()
+                epd.init()
+                epd.Clear(0xFF)
+                
+                # Re-display base image for partial updates
+                time_image = Image.new('1', (epd.height, epd.width), 255)
+                epd.displayPartBaseImage(epd.getbuffer(time_image))
+                
+                last_full_refresh_time = current_time
+            
+            # Sleep to reduce CPU usage
+            time.sleep(60)  # Check every minute
             
     except KeyboardInterrupt:
         logging.info("Program terminated by user")
         logging.info("Exiting gracefully...")
-        # Close WebSocket connection
-        if ws is not None:
-            ws.close()
-        # Clean up display resources
+        # Clean up resources
         try:
+            if websocket_app is not None:
+                websocket_app.close()
             if epd is not None:
                 epd.init()
                 epd.Clear(0xFF)
                 epd.sleep()
-        except Exception as e:
-            logging.error(f"Error during cleanup: {str(e)}")
+        except:
+            pass
     except Exception as e:
         logging.error(f"A critical error occurred: {str(e)}")
         traceback.print_exc()
