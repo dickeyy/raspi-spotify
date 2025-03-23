@@ -3,7 +3,7 @@
 > [!NOTE]
 > This program _technically_ displays Last.fm data, not Spotify directly. So please have a Last.fm account and link your Spotify account to it otherwise the program will not work. The data should be the same, Spotify's API just doesn't provide the necessary data, and Last.fm's API is _much_ easier to use with far fewer restrictions.
 
-This is a little program that displays whatever song you are currently listening to on Spotify on a Waveshare e-Paper display connected to a Raspberry Pi.
+This is a little program that displays whatever song you are currently listening to on Spotify on a Waveshare e-Paper display connected to a Raspberry Pi. It uses a WebSocket connection for real-time updates.
 
 ## Required Hardware
 
@@ -16,7 +16,7 @@ This is a little program that displays whatever song you are currently listening
 - Any OS will work, I have only tested on Raspberry Pi OS Lite 32-bit though.
 - Python 3.10+
 - Waveshare e-Paper display library. Currently only supports Waveshare 2.13" e-Paper HAT.
-- Python packages: requests, Pillow (PIL)
+- Python packages: requests, Pillow (PIL), websocket-client
 
 ## Installation
 
@@ -40,11 +40,16 @@ git clone https://github.com/waveshare/e-Paper.git
 
 ### 3. Install required Python packages
 
+You can now install all required dependencies using the provided requirements.txt file:
+
 ```bash
-# Install required packages
+# Install required system packages
 sudo apt-get update
 sudo apt-get install -y python3-pip python3-pil python3-numpy
-pip3 install requests Pillow
+
+# Install Python dependencies from requirements.txt
+cd ~/raspi-spotify
+pip3 install -r requirements.txt
 ```
 
 ### 4. Clone this repository
@@ -58,10 +63,10 @@ cd raspi-spotify
 
 ### 5. Configure the API endpoint
 
-The script uses an API endpoint to fetch your currently playing Spotify track. By default, it uses:
+The script uses a WebSocket API endpoint to fetch your currently playing Spotify track in real-time. By default, it uses:
 
 ```
-https://api.kyle.so/spotify/current-track?user=mrdickeyy
+wss://api.kyle.so/spotify/current-track/ws?user=mrdickeyy
 ```
 
 Note that this API is mine and NOT official. I'm not affiliated with Spotify or Last.fm. You will need to replace the `user` parameter with your own **Last.fm username**, NOT your Spotify username.
@@ -83,7 +88,7 @@ cd ~/raspi-spotify
 python3 spotify.py
 ```
 
-Once you start playing a song on Spotify, from anywhere in the world, the display will update with the song information. The default refresh rate is 10 seconds so be patient. You _can_ change this in the script, though, I ask that if you want a high refresh rate, you also self-host the API to save on my server resources.
+The display will update in real-time as you play, pause, or change songs on Spotify, from anywhere in the world.
 
 ### Run as a Service (recommended)
 
@@ -131,6 +136,8 @@ sudo systemctl status spotify-display.service
 
 - If you encounter issues with the display, check the SPI interface is enabled.
 - Ensure the Waveshare e-Paper library is correctly installed.
+- Check that all Python dependencies are installed correctly: `pip3 install -r requirements.txt`
+- If you experience WebSocket connection issues, check your network connectivity.
 - Check the logs for any errors:
   ```bash
   sudo journalctl -u spotify-display.service
@@ -140,7 +147,7 @@ sudo systemctl status spotify-display.service
 
 You can modify the `spotify.py` script to change:
 
-- The refresh rate (currently set to 10 seconds)
+- The WebSocket connection settings
 - The display layout
 - The API endpoint for fetching Spotify data
 
