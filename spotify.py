@@ -251,6 +251,13 @@ def display_data(data):
         if not needs_update:
             logging.info("Data hasn't changed, skipping display update")
             return True
+        
+        # If nothing is playing, don't display anything (but still update previous_data)
+        if ("isPlaying" in data and data["isPlaying"] == False):
+            logging.info("Nothing is playing, not displaying anything")
+            # Just update previous_data and return
+            previous_data = data.copy() if isinstance(data, dict) else data
+            return True
             
         # Check if we need a full refresh
         if should_do_full_refresh(current_time):
@@ -509,9 +516,15 @@ def main():
         ws_thread = threading.Thread(target=websocket_thread_function, daemon=True)
         ws_thread.start()
         
-        # Display initial "connecting" message
+        # Clear the display initially (don't show any connecting message)
+        epd.init()
+        epd.Clear(0xFF)
+        # Prepare for partial updates
+        time_image = Image.new('1', (epd.height, epd.width), 255)
+        epd.displayPartBaseImage(epd.getbuffer(time_image))
+        # Set initial data
         initial_data = {"isPlaying": False, "message": "Connecting to Spotify..."}
-        display_data(initial_data)
+        previous_data = initial_data.copy()
         
         # Main thread just keeps the program running
         while True:
