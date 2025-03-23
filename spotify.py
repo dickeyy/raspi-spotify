@@ -251,13 +251,6 @@ def display_data(data):
         if not needs_update:
             logging.info("Data hasn't changed, skipping display update")
             return True
-        
-        # If nothing is playing, don't display anything (but still update previous_data)
-        if ("isPlaying" in data and data["isPlaying"] == False):
-            logging.info("Nothing is playing, not displaying anything")
-            # Just update previous_data and return
-            previous_data = data.copy() if isinstance(data, dict) else data
-            return True
             
         # Check if we need a full refresh
         if should_do_full_refresh(current_time):
@@ -294,17 +287,6 @@ def display_data(data):
         # Log display dimensions for debugging
         logging.info(f"Display dimensions: {epd.height}x{epd.width}")
         
-        # Attempt to get album art if not in error state
-        album_art = None
-        if "isPlaying" in data and data["isPlaying"] and "imageUrl" in data and data["imageUrl"]:
-            # Try to get album art, but don't let it block the display update if it fails
-            try:
-                album_art = get_album_art(data["imageUrl"])
-                if album_art:
-                    logging.info(f"Album art dimensions: {album_art.width}x{album_art.height}")
-            except Exception as e:
-                logging.error(f"Album art retrieval failed, continuing without it: {str(e)}")
-        
         # New layout constants
         left_margin = 5  # Reduced left margin to make more room
         header_y = 5      # Y position for header
@@ -312,20 +294,28 @@ def display_data(data):
         # Draw a header
         draw.text((left_margin, header_y), "Now Playing:", font=font_status, fill=0)
         
-        # Check if nothing is playing (new format)
+        # If nothing is playing, just show the header and update the display
         if "isPlaying" in data and data["isPlaying"] == False:
-            # Show a friendly message for no tracks playing
-            draw.text((left_margin, header_y + 20), "No music playing", font=font_status, fill=0)
+            logging.info("Nothing is playing, showing only the header")
+            # Continue to display the image with just the header
         # Still handle the old error format as a fallback
         elif "error" in data:
             if data["error"].lower() not in ["nothing is playing", "no tracks found"]:
                 # Only show error if it's actually an error
                 draw.text((left_margin, header_y + 20), f"Error: {data['error']}", font=font_status, fill=0)
-            else:
-                # Show a friendly message for no tracks playing
-                draw.text((left_margin, header_y + 20), "No music playing", font=font_status, fill=0)
+            # Otherwise, just show the header
         else:
-            # New layout with album art on the left
+            # Something is playing, display album art and track info
+            # Attempt to get album art
+            album_art = None
+            if "imageUrl" in data and data["imageUrl"]:
+                # Try to get album art, but don't let it block the display update if it fails
+                try:
+                    album_art = get_album_art(data["imageUrl"])
+                    if album_art:
+                        logging.info(f"Album art dimensions: {album_art.width}x{album_art.height}")
+                except Exception as e:
+                    logging.error(f"Album art retrieval failed, continuing without it: {str(e)}")
             
             # Starting positions
             content_x = left_margin
